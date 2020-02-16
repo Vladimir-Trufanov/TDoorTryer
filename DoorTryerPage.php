@@ -7,17 +7,67 @@
 // ****************************************************************************
 
 //                                                   Автор:       Труфанов В.Е.
-//                                                   Дата создания:  09.04.2019
-// Copyright © 2019 tve                              Посл.изменение: 13.05.2019
+// v1.1                                              Дата создания:  09.04.2019
+// Copyright © 2019 tve                              Посл.изменение: 16.02.2020
 
 /**
  * В DoorTryer заложены все типы ошибок: через установленный модуль от 
  * set_error_handler обрабатывается большинство ошибок, остальные ошибки 
  * вылавливаются после завершения работы сценария через 
  * register_shutdown_function, через try-catch-error обрабатываются исключения
+ * 
+ * Сообщение об ошибке или исключении собирается на основании 5 параметров:
+ * $errstr - текст сообщения; $errtype - тип сообщения; $errline - строка 
+ * сценария, где произошла ошибка или исключение; $errfile - файл сценария; 
+ * $errtrace - трассировка всплывания сообщения
 **/
 
-require_once $_SERVER['DOCUMENT_ROOT']."/TDoorTryer/DoorTryerMessage.php";
+// ------------------------------------------ Используемые регулярные выражения
+// "фрагмент с типом ошибки с начала строки до ":"
+define ("regErrorType",   "/^[A-Za-z_]{1,}:/u");
+// "префикс ошибки" с начала строки
+define ("regPrefix",      "/^\[[A-Za-z_А-Яа-яЁё\s()]{1,}\]/u");
+// "фрагмент трассировки с начала строки до "thrown"
+define ("regThrown",      "/^[\s\S]{1,}thrown/u");
+// "фрагмент от "#2" до конца строки
+define ("regTrace2",      "/#2[\s\S]{1,}$/u");
+// "фрагмент трассировки в сообщении об ошибке"
+define ("regTrace",       "/Stack trace:[\s\S]{1,}$/u");
+
+// ****************************************************************************
+// *    Выбрать из строки подстроку, соответствующую регулярному выражению    *  
+// ****************************************************************************
+function findes($preg,$string,&$point=0)
+{
+   $findes='';
+   $value=preg_match($preg,$string,$matches,PREG_OFFSET_CAPTURE);
+   if ($value>0)
+   {
+      $findes=$matches[0][0];
+      $point=$matches[0][1];
+   }
+   return $findes;
+}
+// ****************************************************************************
+// *                     Вывести сообщение об ошибке/исключении               *
+// ****************************************************************************
+function DoorTryMessage($ierrstr,$errtype,$errline='',$errfile='',$errtrace='')
+{
+   $errstr=$ierrstr;
+   // Добавляем префикс "PHP", если он отсутствует
+   $Prefix=findes(regPrefix,$errstr,$point);
+   if ($Prefix=='') $errstr='[PHP] '.$ierrstr;
+   // Выводим сообщение об ошибке/исключении
+   echo '<div style="border-style:inset; border-width:2">';
+   echo "<pre>";
+   echo "<b>".$errstr."</b><br><br>";
+   echo "File: ".$errfile."<br>";
+   echo "Line: ".$errline."<br><br>";
+   echo $errtype."<br>";
+   if (!($errtrace=='')) {echo $errtrace."<br>";}
+   echo "</pre>";
+   echo "</div>";
+}
 
 // ------------------------------------------- Массив зарегистрированных ошибок
 // 1 - фатальная ошибка во время выполнения
@@ -52,6 +102,7 @@ $TypeErrors[E_DEPRECATED]        = "E_DEPRECATED";
 $TypeErrors[E_USER_DEPRECATED]   = "E_USER_DEPRECATED"; 
 // 32767
 $TypeErrors[E_ALL]               = "E_ALL"; 
+
 // ****************************************************************************
 // *         Определить: является ли версия текущего PHP-сценария             *
 // *                        седьмой или большей                               *
@@ -100,31 +151,32 @@ function LastFindes($preg,$string,&$point=0,$say=false)
    return $Result;
 }
 // ****************************************************************************
-// *    Проинициализировать параметры Php.ini для управления выводом ошибок   *
+// *    Проинициализировать параметры php.ini для управления выводом ошибок   *
 // ****************************************************************************
 function InisetErrors()
 {
-   // Определеяем уровень протоколирования ошибок
-   error_reporting(E_ALL);
    // Определяем режим вывода ошибок:
    //   если display_errors = on, то в случае ошибки браузер получит html 
-   //   c текстом ошибки и кодом 200
+   // c текстом ошибки и кодом 200
    //   если же display_errors = off, то для фатальных ошибок код ответа будет 500
-   //   и результат не будет возвращён пользователю, для остальных ошибок – 
-   //   код будет работать неправильно, но никому об этом не расскажет
+   // и результат не будет возвращён пользователю, для остальных ошибок – 
+   // код будет работать неправильно, но никому об этом не расскажет
    ini_set('display_errors','Off');
-   // Определяем режим вывода ошибок при запуске PHP. Если = on, то даже если 
-   // display_errors включена; ошибки, возникающие во время запуска PHP, не будут 
-   // отображаться. Настойчиво рекомендуем включать директиву 
-   // display_startup_errors только для отладки
+   // Определяем режим вывода ошибок при запуске PHP:
+   //   если = on, то даже при включённом display_errors возникающие ошибки во 
+   // время запуска PHP, не будут отображаться. 
    ini_set('display_startup_errors','Off');
    // Определяем ведение журнала, в котором будут сохраняться сообщения об ошибках.
    // Это может быть журнал сервера или error_log. Применимость этой настройки 
    // зависит от конкретного сервера.
-   //    При работе на готовых работающих web сайтах следует протоколировать 
-   // ошибки там, где они отображаются
+   //   При работе на готовых работающих web сайтах следует протоколировать 
+   // ошибки там, где они отображаются. Настойчиво рекомендуем включать директиву 
+   // display_startup_errors только для отладки.
    ini_set('log_errors','On');
    ini_set('error_log','log.txt');
+   // Определяем типы выводимых ошибок
+   // (здесь указываем все, кроме устаревающих)
+   error_reporting(E_ALL & ~E_DEPRECATED);
 }
 // ****************************************************************************
 // *      Проверить наличие ключа в массиве зарегистрированных ошибок PHP     *
@@ -198,7 +250,21 @@ function terGetTrace2($e)
 // ****************************************************************************
 // * Сформировать и подготовить для вывода сообщение об ошибке или исключении *
 // ****************************************************************************
-function DoorTryExec($errstr,$errtype,$errline='',$errfile='',$errtrace='',$MakePage=true)
+// Проверить разрешен ли вывод данного типа ошибок error_reporting-ом
+function isSay($errtype,$typelast)
+{
+   // Выясняем типы выводимых ошибок
+   $errorlevel=error_reporting();
+   // Выделяем в битах разрешенных типов ошибок
+   // бит типа текущей ошибки
+   $iz=$errorlevel&$typelast;
+   // Если бит был установлен, то разрешаем вывод
+   if ($iz>0) $Result=true;
+   else $Result=false;
+   return $Result;
+}
+// Сформировать и подготовить для вывода сообщение об ошибке или исключении 
+function DoorTryExec($errstr,$errtype,$errline='',$errfile='',$errtrace='',$typelast=1)
 {
    // Определяем: Выводить сообщение на текущей странице или через сайт doortry.ru 
    global $FaultLocation; 
@@ -209,21 +275,19 @@ function DoorTryExec($errstr,$errtype,$errline='',$errfile='',$errtrace='',$Make
    // Выводим сообщение об ошибке/исключении через сайт doortry.ru
    if ($FaultLocation==true)
    {
-      $uripage="https://doortry.ru/error.php".
-      //$uripage="http://kwinflatht.nichost.ru/error.php".
-      //$uripage="http://localhost:82/error.php".
+      if (isSay($errtype,$typelast))
+      {
+         $uripage="https://doortry.ru/error.php".
          "?estr=".urlencode($errstr).
          "&etype=".urlencode($errtype).
          "&eline=".urlencode($errline).
          "&efile=".urlencode($errfile).
          "&etrace=".urlencode($errtrace);
-      // Вызываем страницу ошибки через javascript
-      echo '<script>';
-      //echo 'window.location.assign("'.$uripage.'")';
-      echo 'location.replace("'.$uripage.'")';
-      echo '</script>';
-      // Вызываем страницу ошибки через отправку заголовка
-      // Header("Location: ".$uripage);
+         // Вызываем страницу ошибки через javascript
+         echo '<script>';
+         echo 'location.assign("'.$uripage.'")';
+         echo '</script>';
+      }
    }
    // Выводим сообщение об ошибке/исключении на текущей странице
    else DoorTryMessage($errstr,$errtype,$errline,$errfile,$errtrace);
@@ -271,7 +335,7 @@ function DoorTryShutdown()
       DoorTryExec
       (
          $string,$TypeError.' [SHT]',
-         $lasterror['line'],$lasterror['file'],$trace
+         $lasterror['line'],$lasterror['file'],$trace,$typelast
       );
    }
 } 
@@ -296,22 +360,22 @@ function DoorTryHandler($errno,$errstr,$errfile,$errline)
       {
          // Делаем принудительное исключение для того,
          // чтобы поймать трассировку
-         throw new Exception('Hello!');
+         throw new Exception('MakeTrass!');
       }
       catch (Exception $e)
       {
          // Выделяем трассировку
          $errtrace=terGetTrace2($e); 
-         // Запускаем вывод ошибки     
+         // Запускаем вывод ошибки 
          DoorTryExec
          (
-            $errstr,$TypeError.' [HND]',$errline,$errfile,$errtrace
+            $errstr,$TypeError.' [HND]',$errline,$errfile,$errtrace,$typelast
          );
       }
    }
    else
    {
-      DoorTryExec('Авария-95!',1,'','','',false);
+      DoorTryExec('Авария-95!','Error95','','','',1);
    }
 }  
 // ****************************************************************************
@@ -328,7 +392,7 @@ function DoorTryPage($e)
    }
    else
    {
-      $TypeError='NoDefine'; $Point=-1;  
+      $TypeError='NoDefine'; $Point=1;  
    }
    // При неопределенном типе ошибки для PHP5 
    // назначаем тип ошибки по типу класса
@@ -342,7 +406,7 @@ function DoorTryPage($e)
    DoorTryExec
    (
       $e->getMessage(),$TypeError.' [PGE]',
-      $e->getLine(),$e->getFile(),$e->getTraceAsString()
+      $e->getLine(),$e->getFile(),$e->getTraceAsString(),$Point
    );
 }
 // ****************************************************************************
