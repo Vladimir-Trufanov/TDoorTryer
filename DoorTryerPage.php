@@ -1,15 +1,12 @@
 <?php
 // PHP7/HTML5, EDGE/CHROME                            *** DoorTryerPage.php ***
-
 // ****************************************************************************
 // * doortry.ru         Собрать и обработать ошибку или исключение PHP5-PHP7, *
 // *           сформировать страницу с выводом сообщения и комментария к нему *
 // ****************************************************************************
-
 //                                                   Автор:       Труфанов В.Е.
-// v1.1                                              Дата создания:  09.04.2019
-// Copyright © 2019 tve                              Посл.изменение: 16.02.2020
-
+// v1.2                                              Дата создания:  09.04.2019
+// Copyright © 2019 tve                              Посл.изменение: 17.02.2020
 /**
  * В DoorTryer заложены все типы ошибок: через установленный модуль от 
  * set_error_handler обрабатывается большинство ошибок, остальные ошибки 
@@ -21,54 +18,15 @@
  * сценария, где произошла ошибка или исключение; $errfile - файл сценария; 
  * $errtrace - трассировка всплывания сообщения
 **/
-
 // ------------------------------------------ Используемые регулярные выражения
 // "фрагмент с типом ошибки с начала строки до ":"
 define ("regErrorType",   "/^[A-Za-z_]{1,}:/u");
-// "префикс ошибки" с начала строки
-define ("regPrefix",      "/^\[[A-Za-z_А-Яа-яЁё\s()]{1,}\]/u");
 // "фрагмент трассировки с начала строки до "thrown"
 define ("regThrown",      "/^[\s\S]{1,}thrown/u");
 // "фрагмент от "#2" до конца строки
 define ("regTrace2",      "/#2[\s\S]{1,}$/u");
 // "фрагмент трассировки в сообщении об ошибке"
 define ("regTrace",       "/Stack trace:[\s\S]{1,}$/u");
-
-// ****************************************************************************
-// *    Выбрать из строки подстроку, соответствующую регулярному выражению    *  
-// ****************************************************************************
-function findes($preg,$string,&$point=0)
-{
-   $findes='';
-   $value=preg_match($preg,$string,$matches,PREG_OFFSET_CAPTURE);
-   if ($value>0)
-   {
-      $findes=$matches[0][0];
-      $point=$matches[0][1];
-   }
-   return $findes;
-}
-// ****************************************************************************
-// *                     Вывести сообщение об ошибке/исключении               *
-// ****************************************************************************
-function DoorTryMessage($ierrstr,$errtype,$errline='',$errfile='',$errtrace='')
-{
-   $errstr=$ierrstr;
-   // Добавляем префикс "PHP", если он отсутствует
-   $Prefix=findes(regPrefix,$errstr,$point);
-   if ($Prefix=='') $errstr='[PHP] '.$ierrstr;
-   // Выводим сообщение об ошибке/исключении
-   echo '<div style="border-style:inset; border-width:2">';
-   echo "<pre>";
-   echo "<b>".$errstr."</b><br><br>";
-   echo "File: ".$errfile."<br>";
-   echo "Line: ".$errline."<br><br>";
-   echo $errtype."<br>";
-   if (!($errtrace=='')) {echo $errtrace."<br>";}
-   echo "</pre>";
-   echo "</div>";
-}
-
 // ------------------------------------------- Массив зарегистрированных ошибок
 // 1 - фатальная ошибка во время выполнения
 $TypeErrors[E_ERROR]             = "E_ERROR";
@@ -102,7 +60,20 @@ $TypeErrors[E_DEPRECATED]        = "E_DEPRECATED";
 $TypeErrors[E_USER_DEPRECATED]   = "E_USER_DEPRECATED"; 
 // 32767
 $TypeErrors[E_ALL]               = "E_ALL"; 
-
+// ****************************************************************************
+// *    Выбрать из строки подстроку, соответствующую регулярному выражению    *  
+// ****************************************************************************
+function findes($preg,$string,&$point=0)
+{
+   $findes='';
+   $value=preg_match($preg,$string,$matches,PREG_OFFSET_CAPTURE);
+   if ($value>0)
+   {
+      $findes=$matches[0][0];
+      $point=$matches[0][1];
+   }
+   return $findes;
+}
 // ****************************************************************************
 // *         Определить: является ли версия текущего PHP-сценария             *
 // *                        седьмой или большей                               *
@@ -124,7 +95,6 @@ function LastFindes($preg,$string,&$point=0,$say=false)
 {
    $Result='';
    $x=preg_match_all($preg,$string,$imatches,PREG_OFFSET_CAPTURE);
-   if (!($matches=null)) $matches=$imatches;
    if ($say==true)
    {
       echo '<br>'.'$string: '.$string;
@@ -266,31 +236,19 @@ function isSay($errtype,$typelast)
 // Сформировать и подготовить для вывода сообщение об ошибке или исключении 
 function DoorTryExec($errstr,$errtype,$errline='',$errfile='',$errtrace='',$typelast=1)
 {
-   // Определяем: Выводить сообщение на текущей странице или через сайт doortry.ru 
-   global $FaultLocation; 
-   if (!(IsSet($FaultLocation)))    
+   if (isSay($errtype,$typelast))
    {
-      $FaultLocation=true;
+      $uripage="https://doortry.ru/DoorTryError.php".
+      "?estr=".urlencode($errstr).
+      "&etype=".urlencode($errtype).
+      "&eline=".urlencode($errline).
+      "&efile=".urlencode($errfile).
+      "&etrace=".urlencode($errtrace);
+      // Вызываем страницу ошибки через javascript
+      echo '<script>';
+      echo 'location.assign("'.$uripage.'")';
+      echo '</script>';
    }
-   // Выводим сообщение об ошибке/исключении через сайт doortry.ru
-   if ($FaultLocation==true)
-   {
-      if (isSay($errtype,$typelast))
-      {
-         $uripage="https://doortry.ru/error.php".
-         "?estr=".urlencode($errstr).
-         "&etype=".urlencode($errtype).
-         "&eline=".urlencode($errline).
-         "&efile=".urlencode($errfile).
-         "&etrace=".urlencode($errtrace);
-         // Вызываем страницу ошибки через javascript
-         echo '<script>';
-         echo 'location.assign("'.$uripage.'")';
-         echo '</script>';
-      }
-   }
-   // Выводим сообщение об ошибке/исключении на текущей странице
-   else DoorTryMessage($errstr,$errtype,$errline,$errfile,$errtrace);
 }
 // ****************************************************************************
 // * [SHT]     Обработать пропущенные ошибки после завершения работы сценария *
@@ -298,7 +256,6 @@ function DoorTryExec($errstr,$errtype,$errline='',$errfile='',$errtrace='',$type
 function DoorTryShutdown()
 {
    global $TypeErrors;
-   
    $lasterror=error_get_last();
    $typelast=intval($lasterror['type']);
    if (terIsKey($typelast))
@@ -345,7 +302,6 @@ function DoorTryShutdown()
 function DoorTryHandler($errno,$errstr,$errfile,$errline)
 {
    global $TypeErrors;
-   
    // Если error_reporting нулевой, значит, использован оператор @,
    // все ошибки должны игнорироваться
    if (!error_reporting())
@@ -375,7 +331,7 @@ function DoorTryHandler($errno,$errstr,$errfile,$errline)
    }
    else
    {
-      DoorTryExec('Авария-95!','Error95','','','',1);
+      DoorTryExec('Нет ключа в зарегистрированных ошибках PHP!','E_ERROR','','','',1);
    }
 }  
 // ****************************************************************************
