@@ -83,7 +83,7 @@ function isPhp7()
    $Result=False;
    if (defined('PHP_VERSION_ID')) 
    {
-      if (PHP_VERSION_ID>=70000) {$Result=True;}
+      if (PHP_VERSION_ID>=70000) $Result=True;
    }
    return $Result;
 }
